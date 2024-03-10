@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -50,8 +49,6 @@ type Resource struct {
 	IP   string `json:"ip"`
 	Port int    `json:"port"`
 }
-
-var usedPorts = make(map[int]bool)
 
 func serializeDns2tcpdConfig(config Dns2tcpdConfig) ([]byte, error) {
 	configTemplate := `listen = {{.Listen}}
@@ -219,29 +216,6 @@ func getDns2tcpdConfig(c *gin.Context) {
 	c.String(http.StatusOK, response)
 }
 
-func initUsedPorts(configDir string) {
-	err := filepath.Walk(configDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() && filepath.Ext(path) == ".conf" {
-			port, err := extractPortFromConfig(path)
-			if err != nil {
-				log.Printf("Failed to extract port from config file %s: %v", path, err)
-				return nil
-			}
-			usedPorts[port] = true
-		}
-		return nil
-	})
-
-	if err != nil {
-		log.Fatalf("Failed to walk through config directory %s: %v", configDir, err)
-	}
-
-	log.Printf("Initialized used ports from existing configs. Total ports: %d", len(usedPorts))
-}
-
 func updateConfig(config Dns2tcpdConfig, newResources ...Resource) error {
 
 	configFilePath := fmt.Sprintf("%s%s_%s_dns2tcpd.conf", Config.Dns2tcpdConfigPath, config.Identifier, config.Domain)
@@ -387,16 +361,13 @@ func extractPortFromConfig(configFilePath string) (int, error) {
 
 func findAvailablePort() (int, error) {
 	for port := 1025; port <= 65535; port++ {
-		if _, used := usedPorts[port]; !used {
-			listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
-			if err != nil {
-				continue
-			}
-			listener.Close()
-
-			usedPorts[port] = true
-			return port, nil
+		listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
+		if err != nil {
+			continue
 		}
+		listener.Close()
+
+		return port, nil
 	}
 	return 0, fmt.Errorf("no available ports found")
 }

@@ -38,7 +38,6 @@ var tunnelUpdateMapMutex sync.Mutex
 
 func startAPI() *http.Server {
 
-	initUsedPorts(Config.Dns2tcpdConfigPath)
 	go startWatchdog(Config.WatchDogTimeout)
 
 	router := gin.Default()
