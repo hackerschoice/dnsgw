@@ -55,7 +55,7 @@ func main() {
 
 	initDB()
 
-	log.SetLevel(log.DebugLevel)
+	log.SetLevel(Config.LogLevel)
 
 	httpServer := startAPI()
 

@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"net"
+
 	log "github.com/sirupsen/logrus"
 
 	"github.com/gin-gonic/gin"
@@ -137,6 +139,23 @@ func updateTunnel(c *gin.Context) {
 		return
 	}
 	log.Debug("Successfully deserialized config from disk")
+
+	for _, resource := range req.Resources {
+		for _, cidr := range Config.BlacklistedCIDRs {
+			_, blacklistedNet, err := net.ParseCIDR(cidr)
+			if err != nil {
+				log.Errorf("Failed to parse blacklisted CIDR %s: %v", cidr, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to parse blacklisted CIDR: %v", err)})
+				return
+			}
+			if blacklistedNet.Contains(net.ParseIP(resource.IP)) {
+				log.Errorf("Resource IP %s is in a blacklisted CIDR range %s", resource.IP, cidr)
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Resource IP %s is in a blacklisted CIDR range", resource.IP)})
+				return
+			}
+		}
+	}
+	log.Debug("All resources validated against blacklisted CIDRs")
 
 	if err := updateConfig(config, req.Resources...); err != nil {
 		log.Errorf("Failed to update config resources: %v", err)
@@ -274,6 +293,21 @@ func createTunnel(c *gin.Context) {
 		return
 	}
 
+	for _, cidr := range Config.BlacklistedCIDRs {
+		_, blacklistedNet, err := net.ParseCIDR(cidr)
+		if err != nil {
+			log.Errorf("Failed to parse blacklisted CIDR %s: %v", cidr, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to parse blacklisted CIDR: %v", err)})
+			return
+		}
+		if blacklistedNet.Contains(net.ParseIP(ip)) {
+			log.Errorf("Resource IP %s is in a blacklisted CIDR range %s", ip, cidr)
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Resource IP %s is in a blacklisted CIDR range", ip)})
+			return
+		}
+	}
+	log.Debug("All resources validated against blacklisted CIDRs")
+
 	identifier := uuid.New().String()
 	log.Printf("Generating domain name for IP: %s, Port: %d with Identifier: %s\n", ip, port, identifier)
 	domain := generateDomainName(db)
@@ -314,6 +348,8 @@ func createTunnel(c *gin.Context) {
 	}
 
 	config := Dns2tcpdConfig{
+		// maybe we'll change this to use the entire loopback range, but i think we wont have more than
+		// 64k connections actively being used
 		Listen: "127.0.0.1",
 		Port:   localPort,
 		User:   "", // change to unpriv, nobody maybe
