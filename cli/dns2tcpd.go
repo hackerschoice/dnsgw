@@ -69,7 +69,7 @@ func initDns2tcpdCommands() {
 }
 
 func cliGetConfig(updateKey, resource string, localPort string) {
-	apiURL := "http://localhost:8080/v1/dns2tcpd/config"
+	apiURL := getApiBaseUrl() + "/v1/dns2tcpd/config"
 	jsonData := map[string]string{
 		"update_key": updateKey,
 		"resource":   resource,
@@ -95,7 +95,7 @@ func cliGetConfig(updateKey, resource string, localPort string) {
 }
 
 func cliCreateTunnel(ip, port string) {
-	apiURL := fmt.Sprintf("http://localhost:8080/v1/dns2tcpd/create/%s/%s", ip, port)
+	apiURL := fmt.Sprintf("%s/v1/dns2tcpd/create/%s/%s", getApiBaseUrl(), ip, port)
 	resp, err := http.Post(apiURL, "application/json", nil)
 	if err != nil {
 		log.Fatalf("Error creating tunnel: %v", err)
@@ -112,7 +112,7 @@ func cliCreateTunnel(ip, port string) {
 }
 
 func cliUpdateTunnel(updateKey string, resourcesData []string) {
-	apiURL := "http://localhost:8080/v1/dns2tcpd/update"
+	apiURL := getApiBaseUrl() + "/v1/dns2tcpd/update"
 
 	var resources []Dns2tcpdResource
 	for _, res := range resourcesData {

@@ -174,7 +174,7 @@ func getDns2tcpdConfig(c *gin.Context) {
 		return
 	}
 
-	var tunnel Tunnel
+	var tunnel Dns2TcpdTunnel
 	err = db.Where("update_key = ?", jsonBody.UpdateKey).First(&tunnel).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -310,7 +310,7 @@ func updateConfig(config Dns2tcpdConfig, newResources ...Resource) error {
 	}
 
 	if portChanged {
-		result := db.Model(&Tunnel{}).Where("identifier = ?", config.Identifier).Update("local_port", config.Port)
+		result := db.Model(&Dns2TcpdTunnel{}).Where("identifier = ?", config.Identifier).Update("local_port", config.Port)
 		if result.Error != nil {
 			log.Errorf("Failed to update port in database for identifier %s: %v", config.Identifier, result.Error)
 			return fmt.Errorf("failed to update port in database for identifier %s: %v", config.Identifier, result.Error)
