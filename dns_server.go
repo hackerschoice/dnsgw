@@ -70,6 +70,7 @@ func handleTunnel(r *dns.Msg, domain string) (*dns.Msg, error) {
 		log.Printf("Failed to get local port for tunnel: %v\n", err)
 		return nil, fmt.Errorf("failed to get local port for tunnel: %v", err)
 	}
+	log.Debugf("Local port for tunnel: %d", localPort)
 
 	addr := fmt.Sprintf("127.0.0.1:%d", localPort)
 
