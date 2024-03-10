@@ -29,6 +29,9 @@ func extractSubdomain(fullDomain string) string {
 }
 
 func handleTunnel(r *dns.Msg, domain string) (*dns.Msg, error) {
+	// NOTE: This will need some serious work to refactor to support multiple transports...
+	// This function should probably just figure out what transport a tunnel dns entry is associated with
+	// then call out to a dns2tcpd (or other transport) specific function
 	var count int64
 	err := db.Model(&Tunnel{}).Where("domain = ?", domain).Count(&count).Error
 	if err != nil {
