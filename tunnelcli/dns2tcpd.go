@@ -15,7 +15,6 @@ import (
 
 type Dns2tcpdJsonResponse struct {
 	Target    string `json:"target"`
-	Expiry    int64  `json:"expiry"`
 	Key       string `json:"key"`
 	UpdateKey string `json:"update_key"`
 }
@@ -108,7 +107,7 @@ func cliCreateTunnel(ip, port string) {
 		log.Fatalf("Error decoding response: %v", err)
 	}
 
-	fmt.Printf("Tunnel created successfully:\nDomain: %s\nKey: %s\nUpdateKey: %s\nExpiry: %d\n", jsonResponse.Target, jsonResponse.Key, jsonResponse.UpdateKey, jsonResponse.Expiry)
+	fmt.Printf("Tunnel created successfully:\nDomain: %s\nKey: %s\nUpdateKey: %s", jsonResponse.Target, jsonResponse.Key, jsonResponse.UpdateKey)
 
 }
 

@@ -33,7 +33,6 @@ type Tunnel struct {
 
 type JsonResponse struct {
 	Target    string `json:"target"`
-	Expiry    int64  `json:"expiry"`
 	Key       string `json:"key"`
 	UpdateKey string `json:"update_key"`
 }
@@ -407,7 +406,6 @@ func createTunnel(c *gin.Context) {
 		Target:    domain,
 		Key:       key,
 		UpdateKey: updateKey,
-		Expiry:    time.Now().Add(Config.WatchDogTimeout).Unix(),
 	}
 
 	c.JSON(http.StatusOK, jsonResponse)
