@@ -23,7 +23,7 @@ func initDB() {
 		log.Fatalf("Error opening database: %v", err)
 	}
 
-	err = db.AutoMigrate(&Tunnel{}, &NameServer{})
+	err = db.AutoMigrate(&Dns2TcpdTunnel{}, &NameServer{})
 	if err != nil {
 		log.Fatalf("Error migrating database: %v", err)
 	}

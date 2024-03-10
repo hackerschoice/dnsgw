@@ -33,6 +33,18 @@ type Dns2tcpdConfig struct {
 	Identifier string
 }
 
+type Dns2TcpdTunnel struct {
+	ID         int       `json:"id" gorm:"primaryKey"`
+	Domain     string    `json:"domain" gorm:"unique;not null"`
+	IP         string    `json:"ip" gorm:"not null"`
+	Port       int       `json:"port" gorm:"not null"`
+	CreatedAt  time.Time `json:"created_at" gorm:"type:timestamp;not null"`
+	Identifier string    `json:"identifier" gorm:"not null"`
+	LocalPort  int       `json:"local_port" gorm:"not null"`
+	Key        string    `json:"key" gorm:"not null"`
+	UpdateKey  string    `json:"update_key" gorm:"not null"`
+}
+
 type Resource struct {
 	Name string `json:"name"`
 	IP   string `json:"ip"`

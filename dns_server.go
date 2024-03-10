@@ -33,7 +33,7 @@ func handleTunnel(r *dns.Msg, domain string) (*dns.Msg, error) {
 	// This function should probably just figure out what transport a tunnel dns entry is associated with
 	// then call out to a dns2tcpd (or other transport) specific function
 	var count int64
-	err := db.Model(&Tunnel{}).Where("domain = ?", domain).Count(&count).Error
+	err := db.Model(&Dns2TcpdTunnel{}).Where("domain = ?", domain).Count(&count).Error
 	if err != nil {
 		log.Errorf("Failed to query database for subdomain %s: %v", domain, err)
 		return nil, fmt.Errorf("failed to validate subdomain %s: %v", domain, err)
@@ -154,7 +154,7 @@ func handleNameserver(w dns.ResponseWriter, r *dns.Msg, subdomain string) {
 }
 
 func getTunnelLocalPort(domain string) (int, error) {
-	var tunnel Tunnel
+	var tunnel Dns2TcpdTunnel
 	err := db.Where("domain = ?", domain).First(&tunnel).Error
 	if err != nil {
 		return 0, err
@@ -163,7 +163,7 @@ func getTunnelLocalPort(domain string) (int, error) {
 }
 
 func getIdentifierForDomain(domain string) (string, error) {
-	var tunnel Tunnel
+	var tunnel Dns2TcpdTunnel
 	err := db.Select("identifier").Where("domain = ?", domain).First(&tunnel).Error
 	if err != nil {
 		return "", err

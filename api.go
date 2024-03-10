@@ -20,18 +20,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type Tunnel struct {
-	ID         int       `json:"id" gorm:"primaryKey"`
-	Domain     string    `json:"domain" gorm:"unique;not null"`
-	IP         string    `json:"ip" gorm:"not null"`
-	Port       int       `json:"port" gorm:"not null"`
-	CreatedAt  time.Time `json:"created_at" gorm:"type:timestamp;not null"`
-	Identifier string    `json:"identifier" gorm:"not null"`
-	LocalPort  int       `json:"local_port" gorm:"not null"`
-	Key        string    `json:"key" gorm:"not null"`
-	UpdateKey  string    `json:"update_key" gorm:"not null"`
-}
-
 type NameServer struct {
 	ID        uint      `json:"id" gorm:"primaryKey"`
 	Subdomain string    `json:"subdomain" gorm:"unique;not null"`
@@ -95,7 +83,7 @@ func updateTunnel(c *gin.Context) {
 	}
 	log.Debug("Successfully bound JSON to updateRequest struct")
 
-	var tunnel Tunnel
+	var tunnel Dns2TcpdTunnel
 	err := db.Where("update_key = ?", req.UpdateKey).First(&tunnel).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -209,7 +197,7 @@ func generateDomainName() string {
 	const charset = letters + digits
 
 	var existingDomains []string
-	if err := db.Model(&Tunnel{}).Order("domain ASC").Pluck("domain", &existingDomains).Error; err != nil {
+	if err := db.Model(&Dns2TcpdTunnel{}).Order("domain ASC").Pluck("domain", &existingDomains).Error; err != nil {
 		log.Printf("Error querying existing domains: %v\n", err)
 		return ""
 	}
@@ -330,7 +318,7 @@ func createTunnel(c *gin.Context) {
 		return
 	}
 
-	tunnel := Tunnel{
+	tunnel := Dns2TcpdTunnel{
 		Domain:     domain,
 		IP:         ip,
 		Port:       port,

@@ -4,6 +4,14 @@
 
 The `tunnelcli` tool is designed to interact with the backend API, allowing you to manage tunnels from the command line.
 
+To configure the `tunnelcli` tool to interact with a custom backend API, you can set the `TUNNELCLI_API_BASE_URL` environment variable. This allows you to specify the base URL of the API that `tunnelcli` will communicate with. If this environment variable is not set, `tunnelcli` defaults to using `http://localhost:8080` as the base URL.
+
+For example, to set the API base URL to `https://api.example.com`, you can use the following command in your terminal:
+
+```shell
+TUNNELCLI_API_BASE_URL=https://api.example.com ./tunnelcli ...
+```
+
 ### Commands
 
 - **Create a Tunnel**: Creates a new tunnel with the specified IP and port.
@@ -130,7 +138,7 @@ The `AppConfig` struct in `config.go` defines several configuration options for 
 
 - `Dns2tcpdConfigPath`: Specifies the directory path where DNS2TCPD configuration files are stored. Default is `/tmp/dns-configs/`.
 
-- `DomainName`: The domain name used for the DNS tunnels. Currently, the system is designed to support a single domain, e.g., `abc.io`.
+- `DomainName`: The domain name used for the DNS tunnels. Currently, the system is designed to support a single domain, e.g., `abc.io`, although we'll probably adapt it to support multiple domains.. at some point...
 
 - `WatchDogTimeout`: Defines the duration after which the watchdog process will check for inactive or stale tunnels. The default timeout is set to 15 minutes (`15 * time.Minute`).
 
