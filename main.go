@@ -15,7 +15,9 @@ import (
 var db *sql.DB
 
 func initDB() {
-	// NOTE: ip, port, etc no longer really needed here
+	// NOTE: ip, port, etc no longer really needed here, maybe we should store all the items in the config
+	// in the database, so we can create them from scratch if we need to, but i think just keeping a persistent
+	// config folder with each config is proabbly fine for now
 	createTunnelsTable := `CREATE TABLE IF NOT EXISTS tunnels (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		domain TEXT NOT NULL UNIQUE,

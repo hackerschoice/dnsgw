@@ -238,6 +238,31 @@ func incrementSequence(s, charset string) string {
 }
 
 func createTunnel(c *gin.Context) {
+
+	mode := Config.AccessMode.Mode()
+	switch mode {
+	case "Public":
+	case "TokenRequired":
+		token := c.GetHeader("Authorization")
+		if token == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization token required"})
+			return
+		}
+		// TODO: Process tokens
+	case "PreSharedKey":
+		psk := c.GetHeader("X-PreShared-Key")
+		if psk == "" || psk != (Config.AccessMode.(PreSharedKeyMode)).Key {
+			log.Debugf("Incorrect PSK provided")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing Pre-Shared Key"})
+			return
+		}
+		log.Debugf("Correct PSK provided, continuing")
+	default:
+		log.Fatalf("Unknown access mode: %s", mode)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server configuration error"})
+		return
+	}
+
 	log.Println("Creating tunnel...")
 
 	ip := c.Param("ip")
