@@ -45,5 +45,6 @@ var Config = AppConfig{
 	WatchDogTimeout:  15 * time.Minute,
 	AccessMode:       PublicMode{},
 	LogLevel:         logrus.DebugLevel,
-	BlacklistedCIDRs: []string{"192.168.1.0/24", "10.0.0.0/8", "127.0.0.0/8"},
+	BlacklistedCIDRs: []string{"192.168.1.0/24"},
+	//BlacklistedCIDRs: []string{"192.168.1.0/24", "10.0.0.0/8", "127.0.0.0/8"},
 }

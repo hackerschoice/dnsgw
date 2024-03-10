@@ -1,7 +1,7 @@
 package main
 
 import (
-	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,6 +13,7 @@ import (
 	"net"
 
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -20,15 +21,22 @@ import (
 )
 
 type Tunnel struct {
-	ID         int    `json:"id"`
-	Domain     string `json:"domain"`
-	IP         string `json:"ip"`
-	Port       int    `json:"port"`
-	CreatedAt  string `json:"created_at"`
-	Identifier string `json:"identifier"`
-	LocalPort  int    `json:"local_port"`
-	Key        string `json:"key"`
-	UpdateKey  string `json:"update_key"`
+	ID         int       `json:"id" gorm:"primaryKey"`
+	Domain     string    `json:"domain" gorm:"unique;not null"`
+	IP         string    `json:"ip" gorm:"not null"`
+	Port       int       `json:"port" gorm:"not null"`
+	CreatedAt  time.Time `json:"created_at" gorm:"type:timestamp;not null"`
+	Identifier string    `json:"identifier" gorm:"not null"`
+	LocalPort  int       `json:"local_port" gorm:"not null"`
+	Key        string    `json:"key" gorm:"not null"`
+	UpdateKey  string    `json:"update_key" gorm:"not null"`
+}
+
+type NameServer struct {
+	ID        uint      `json:"id" gorm:"primaryKey"`
+	Subdomain string    `json:"subdomain" gorm:"unique;not null"`
+	IP        string    `json:"ip" gorm:"not null"`
+	CreatedAt time.Time `json:"created_at" gorm:"type:timestamp;not null"`
 }
 
 type JsonResponse struct {
@@ -88,11 +96,9 @@ func updateTunnel(c *gin.Context) {
 	log.Debug("Successfully bound JSON to updateRequest struct")
 
 	var tunnel Tunnel
-	query := "SELECT id, domain, ip, port, created_at, identifier, key, update_key, local_port FROM tunnels WHERE update_key = ? LIMIT 1"
-	log.Debugf("Executing query: %s", query)
-	err := db.QueryRow(query, req.UpdateKey).Scan(&tunnel.ID, &tunnel.Domain, &tunnel.IP, &tunnel.Port, &tunnel.CreatedAt, &tunnel.Identifier, &tunnel.Key, &tunnel.UpdateKey, &tunnel.LocalPort)
+	err := db.Where("update_key = ?", req.UpdateKey).First(&tunnel).Error
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Debug("Tunnel not found with provided update_key")
 			c.JSON(http.StatusNotFound, gin.H{"error": "Tunnel not found"})
 		} else {
@@ -177,7 +183,7 @@ func updateTunnel(c *gin.Context) {
 	log.Debugf("Successfully stopped tunnel process for domain: %s", tunnel.Domain)
 
 	if subdomainSeen {
-		if err := startDns2tcpdForDomain(db, tunnel.Domain); err != nil {
+		if err := startDns2tcpdForDomain(tunnel.Domain); err != nil {
 			log.Errorf("Failed to start new tunnel process for domain %s: %v", tunnel.Domain, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start new tunnel process"})
 			return
@@ -195,28 +201,17 @@ func updateTunnel(c *gin.Context) {
 	log.Debug("updateTunnel function completed successfully")
 }
 
-func generateDomainName(db *sql.DB) string {
+func generateDomainName() string {
 	log.Println("Generating domain name...")
 
 	const letters = "abcdefghijklmnopqrstuvwxyz"
 	const digits = "0123456789"
 	const charset = letters + digits
 
-	rows, err := db.Query("SELECT domain FROM tunnels ORDER BY domain ASC")
-	if err != nil {
+	var existingDomains []string
+	if err := db.Model(&Tunnel{}).Order("domain ASC").Pluck("domain", &existingDomains).Error; err != nil {
 		log.Printf("Error querying existing domains: %v\n", err)
 		return ""
-	}
-	defer rows.Close()
-
-	existingDomains := make([]string, 0)
-	for rows.Next() {
-		var domain string
-		if err := rows.Scan(&domain); err != nil {
-			log.Printf("Error scanning domain: %v\n", err)
-			continue
-		}
-		existingDomains = append(existingDomains, domain)
 	}
 
 	baseDomain := "." + Config.DomainName
@@ -309,7 +304,7 @@ func createTunnel(c *gin.Context) {
 
 	identifier := uuid.New().String()
 	log.Printf("Generating domain name for IP: %s, Port: %d with Identifier: %s\n", ip, port, identifier)
-	domain := generateDomainName(db)
+	domain := generateDomainName()
 
 	log.Printf("Generated domain: %s\n", domain)
 
@@ -339,7 +334,7 @@ func createTunnel(c *gin.Context) {
 		Domain:     domain,
 		IP:         ip,
 		Port:       port,
-		CreatedAt:  time.Now().Format(time.RFC3339),
+		CreatedAt:  time.Now(),
 		Identifier: identifier,
 		LocalPort:  localPort,
 		Key:        key,
@@ -371,28 +366,19 @@ func createTunnel(c *gin.Context) {
 		return
 	}
 
-	tx, err := db.Begin()
-	if err != nil {
+	tx := db.Begin()
+	if tx.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to begin transaction"})
 		return
 	}
 
-	stmt, err := tx.Prepare("INSERT INTO tunnels (domain, ip, port, created_at, identifier, local_port, key, update_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-	if err != nil {
-		log.Printf("Error preparing statement: %v\n", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to prepare statement"})
-		return
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(tunnel.Domain, tunnel.IP, tunnel.Port, tunnel.CreatedAt, tunnel.Identifier, tunnel.LocalPort, tunnel.Key, tunnel.UpdateKey)
-	if err != nil {
+	if err := tx.Create(&tunnel).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to execute statement"})
 		return
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx.Commit().Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
 		return
 	}

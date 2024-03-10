@@ -10,10 +10,20 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type DNSRecord struct {
+	Subdomain string
+	IP        string
+	CreatedAt time.Time
+}
+
 func insertDNSRecord(subdomain, ip string) error {
-	createdAt := time.Now().Format(time.RFC3339)
-	_, err := db.Exec("INSERT INTO dns (subdomain, ip, created_at) VALUES (?, ?, ?)", subdomain, ip, createdAt)
-	return err
+	dnsRecord := DNSRecord{
+		Subdomain: subdomain,
+		IP:        ip,
+		CreatedAt: time.Now(),
+	}
+	result := db.Create(&dnsRecord)
+	return result.Error
 }
 
 func generateRandomSubdomain() string {

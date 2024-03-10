@@ -2,57 +2,34 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 	"time"
 
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+
 	log "github.com/sirupsen/logrus"
 )
 
-var db *sql.DB
+var db *gorm.DB
 
 func initDB() {
-	// NOTE: ip, port, etc no longer really needed here, maybe we should store all the items in the config
-	// in the database, so we can create them from scratch if we need to, but i think just keeping a persistent
-	// config folder with each config is proabbly fine for now
-	createTunnelsTable := `CREATE TABLE IF NOT EXISTS tunnels (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		domain TEXT NOT NULL UNIQUE,
-		ip TEXT NOT NULL,
-		port INTEGER NOT NULL,
-		key TEXT NOT NULL,
-		created_at TEXT NOT NULL,
-		identifier TEXT NOT NULL,
-		update_key TEXT NOT NULL,
-		local_port INTEGER NOT NULL
-	);`
-	if _, err := db.Exec(createTunnelsTable); err != nil {
-		log.Fatalf("Error creating tunnels table: %v", err)
-	}
-
-	createDNSTable := `CREATE TABLE IF NOT EXISTS nameserver (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		subdomain TEXT NOT NULL UNIQUE,
-		ip TEXT NOT NULL,
-		created_at TEXT NOT NULL
-	);`
-	if _, err := db.Exec(createDNSTable); err != nil {
-		log.Fatalf("Error creating nameserver table: %v", err)
-	}
-
-}
-
-func main() {
 	var err error
-	db, err = sql.Open("sqlite3", "./tunnels.db")
+	db, err = gorm.Open(sqlite.Open("./tunnels.db"), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("Error opening database: %v", err)
 	}
-	defer db.Close()
 
+	err = db.AutoMigrate(&Tunnel{}, &NameServer{})
+	if err != nil {
+		log.Fatalf("Error migrating database: %v", err)
+	}
+}
+
+func main() {
 	initDB()
 
 	log.SetLevel(Config.LogLevel)

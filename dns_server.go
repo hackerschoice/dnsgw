@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -30,9 +29,8 @@ func extractSubdomain(fullDomain string) string {
 }
 
 func handleTunnel(r *dns.Msg, domain string) (*dns.Msg, error) {
-	query := `SELECT COUNT(*) FROM tunnels WHERE domain = ?`
-	var count int
-	err := db.QueryRow(query, domain).Scan(&count)
+	var count int64
+	err := db.Model(&Tunnel{}).Where("domain = ?", domain).Count(&count).Error
 	if err != nil {
 		log.Errorf("Failed to query database for subdomain %s: %v", domain, err)
 		return nil, fmt.Errorf("failed to validate subdomain %s: %v", domain, err)
@@ -56,7 +54,7 @@ func handleTunnel(r *dns.Msg, domain string) (*dns.Msg, error) {
 		} else {
 			log.Debugf("Starting dns2tcpd for domain: %s", domain)
 			subdomainState.Mutex.Unlock()
-			startDns2tcpdForDomain(db, domain)
+			startDns2tcpdForDomain(domain)
 			subdomainState.Mutex.Lock()
 		}
 		subdomainState.Mutex.Unlock()
@@ -65,7 +63,7 @@ func handleTunnel(r *dns.Msg, domain string) (*dns.Msg, error) {
 		return nil, fmt.Errorf("failed to load subdomain state for domain: %s", domain)
 	}
 
-	localPort, err := getTunnelLocalPort(db, domain)
+	localPort, err := getTunnelLocalPort(domain)
 	if err != nil {
 		log.Printf("Failed to get local port for tunnel: %v\n", err)
 		return nil, fmt.Errorf("failed to get local port for tunnel: %v", err)
@@ -152,24 +150,22 @@ func handleNameserver(w dns.ResponseWriter, r *dns.Msg, subdomain string) {
 
 }
 
-func getTunnelLocalPort(db *sql.DB, domain string) (int, error) {
-	var localPort int
-	query := `SELECT local_port FROM tunnels WHERE domain = ?`
-	err := db.QueryRow(query, domain).Scan(&localPort)
+func getTunnelLocalPort(domain string) (int, error) {
+	var tunnel Tunnel
+	err := db.Where("domain = ?", domain).First(&tunnel).Error
 	if err != nil {
 		return 0, err
 	}
-	return localPort, nil
+	return tunnel.LocalPort, nil
 }
 
-func getIdentifierForDomain(db *sql.DB, domain string) (string, error) {
-	var identifier string
-	query := `SELECT identifier FROM tunnels WHERE domain = ? LIMIT 1`
-	err := db.QueryRow(query, domain).Scan(&identifier)
+func getIdentifierForDomain(domain string) (string, error) {
+	var tunnel Tunnel
+	err := db.Select("identifier").Where("domain = ?", domain).First(&tunnel).Error
 	if err != nil {
 		return "", err
 	}
-	return identifier, nil
+	return tunnel.Identifier, nil
 }
 
 func shouldHandle(domain string) bool {

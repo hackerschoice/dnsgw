@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/rand"
-	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -19,6 +19,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 type Dns2tcpdConfig struct {
@@ -161,11 +162,10 @@ func getDns2tcpdConfig(c *gin.Context) {
 		return
 	}
 
-	var identifier, domain string
-	query := "SELECT identifier, domain FROM tunnels WHERE update_key = ? LIMIT 1"
-	err = db.QueryRow(query, jsonBody.UpdateKey).Scan(&identifier, &domain)
+	var tunnel Tunnel
+	err = db.Where("update_key = ?", jsonBody.UpdateKey).First(&tunnel).Error
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Config not found"})
 		} else {
 			log.Errorf("Failed to query identifier and domain: %v", err)
@@ -173,6 +173,8 @@ func getDns2tcpdConfig(c *gin.Context) {
 		}
 		return
 	}
+	identifier, domain := tunnel.Identifier, tunnel.Domain
+
 	configFilePath := fmt.Sprintf("%s%s_%s_dns2tcpd.conf", Config.Dns2tcpdConfigPath, identifier, domain)
 
 	configData, err := os.ReadFile(configFilePath)
@@ -296,11 +298,10 @@ func updateConfig(config Dns2tcpdConfig, newResources ...Resource) error {
 	}
 
 	if portChanged {
-		updatePortSQL := `UPDATE tunnels SET local_port = ? WHERE identifier = ?`
-		_, err = db.Exec(updatePortSQL, config.Port, config.Identifier)
-		if err != nil {
-			log.Errorf("Failed to update port in database for identifier %s: %v", config.Identifier, err)
-			return fmt.Errorf("failed to update port in database for identifier %s: %v", config.Identifier, err)
+		result := db.Model(&Tunnel{}).Where("identifier = ?", config.Identifier).Update("local_port", config.Port)
+		if result.Error != nil {
+			log.Errorf("Failed to update port in database for identifier %s: %v", config.Identifier, result.Error)
+			return fmt.Errorf("failed to update port in database for identifier %s: %v", config.Identifier, result.Error)
 		}
 		log.Infof("Successfully updated port in database for identifier %s to %d", config.Identifier, config.Port)
 	}
@@ -422,8 +423,8 @@ func createDns2tcpdConfigFile(config Dns2tcpdConfig) (string, error) {
 	return fileName, nil
 }
 
-func startDns2tcpdForDomain(db *sql.DB, domain string) error {
-	identifier, err := getIdentifierForDomain(db, domain)
+func startDns2tcpdForDomain(domain string) error {
+	identifier, err := getIdentifierForDomain(domain)
 	if err != nil {
 		log.Printf("Failed to get identifier for domain %s: %v", domain, err)
 		return err
