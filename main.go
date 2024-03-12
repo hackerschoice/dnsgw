@@ -18,6 +18,14 @@ var db *gorm.DB
 
 func initDB() {
 	var err error
+	if _, err := os.Stat(Config.TunnelDatabasePath); os.IsNotExist(err) {
+		file, err := os.Create(Config.TunnelDatabasePath)
+		if err != nil {
+			log.Fatalf("Failed to create database file: %v", err)
+		}
+		file.Close()
+	}
+
 	db, err = gorm.Open(sqlite.Open(Config.TunnelDatabasePath), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("Error opening database: %v", err)
