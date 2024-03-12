@@ -1,0 +1,17 @@
+version: '3.3'
+
+services:
+  dnsgw:
+    image: sf-dnsgw
+    networks:
+      - sf-dnsgw
+    volumes:
+      - /sec/dnsgw/db:/data/db
+      - /sec/dnsgw/conf:/data/dns-configs
+    ports:
+      - "53:53/udp"
+      - "8080:8080"
+
+networks:
+  sf-dnsgw:
+    driver: bridge
