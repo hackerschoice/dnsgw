@@ -31,6 +31,7 @@ type CIDRRange struct {
 
 type AppConfig struct {
 	Dns2tcpdConfigPath string
+	TunnelDatabasePath string
 	DomainName         string
 	WatchDogTimeout    time.Duration
 	AccessMode         AccessMode
@@ -40,6 +41,7 @@ type AppConfig struct {
 
 var Config = AppConfig{
 	Dns2tcpdConfigPath: "/tmp/dns-configs/",
+	TunnelDatabasePath: "./tunnels.db",
 	// TODO: support multiple domains
 	DomainName:       "abc.io",
 	WatchDogTimeout:  15 * time.Minute,

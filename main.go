@@ -18,7 +18,7 @@ var db *gorm.DB
 
 func initDB() {
 	var err error
-	db, err = gorm.Open(sqlite.Open("./tunnels.db"), &gorm.Config{})
+	db, err = gorm.Open(sqlite.Open(Config.TunnelDatabasePath), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("Error opening database: %v", err)
 	}
