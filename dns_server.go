@@ -10,24 +10,28 @@ import (
 	"github.com/miekg/dns"
 )
 
-func extractSubdomain(fullDomain string) string {
+func extractSubdomain(fullDomain string) (string, error) {
 	fullDomain = strings.TrimSuffix(fullDomain, ".")
 
-	domainToFind := "." + Config.DomainName
+	for _, domainName := range Config.DomainNames {
+		domainToFind := "." + domainName
 
-	pos := strings.Index(fullDomain, domainToFind)
-	if pos == -1 {
-		return ""
+		pos := strings.Index(fullDomain, domainToFind)
+		if pos != -1 {
+			lastDotBeforeDomain := strings.LastIndex(fullDomain[:pos], ".")
+			if lastDotBeforeDomain == -1 {
+				return fullDomain, nil
+			}
+
+			return fullDomain[lastDotBeforeDomain+1 : pos], nil
+		}
 	}
 
-	lastDotBeforeDomain := strings.LastIndex(fullDomain[:pos], ".")
-	if lastDotBeforeDomain == -1 {
-		return fullDomain
-	}
-
-	return fullDomain[lastDotBeforeDomain+1:]
+	return "", fmt.Errorf("failed to extract subdomain from domain: %s", fullDomain)
 }
 
+// TODO: If we should have handled it but there's no config or something, we should return a legitimate
+// DNS message
 func handleTunnel(r *dns.Msg, domain string) (*dns.Msg, error) {
 	// NOTE: This will need some serious work to refactor to support multiple transports...
 	// This function should probably just figure out what transport a tunnel dns entry is associated with
@@ -127,23 +131,32 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 				return
 			}
 
-			subdomain := extractSubdomain(domain)
+			subdomain, err := extractSubdomain(domain)
+			if err != nil {
+				log.Errorf("Failed to extract subdomain from domain: %v", err)
+				return
+			}
 			log.Debugf("Subdomain: %s", subdomain)
 
-			if subdomain == "ns."+Config.DomainName {
-				log.Debugf("Handling nameserver request for subdomain: %s", domain)
-				handleNameserver(w, r, domain)
-			} else {
-				log.Debugf("Handling tunnel request for subdomain: %s", subdomain)
-				handled_r, err := handleTunnel(r, subdomain)
-				if err != nil {
-					log.Errorf("Error handling tunnel request: %v", err)
-					return
+			for _, domainName := range Config.DomainNames {
+				if subdomain == "ns."+domainName {
+					log.Debugf("Handling nameserver request for subdomain: %s", domain)
+					handleNameserver(w, r, domain)
+					break
 				}
-				if handled_r != nil {
-					w.WriteMsg(handled_r)
-					return
-				}
+			}
+
+			log.Debugf("Handling tunnel request for subdomain: %s", subdomain)
+			handled_r, err := handleTunnel(r, subdomain)
+			if err != nil {
+				log.Errorf("Error handling tunnel request: %v", err)
+				m.SetRcode(r, dns.RcodeNameError)
+				w.WriteMsg(m)
+				return
+			}
+			if handled_r != nil {
+				w.WriteMsg(handled_r)
+				return
 			}
 		}
 	}
@@ -172,7 +185,7 @@ func getIdentifierForDomain(domain string) (string, error) {
 }
 
 func shouldHandle(domain string) bool {
-	return dns.IsSubDomain(Config.DomainName+".", domain)
+	return domainService.ShouldHandle(domain)
 }
 
 func startDNS() *dns.Server {

@@ -15,6 +15,7 @@ import (
 )
 
 var db *gorm.DB
+var domainService *DomainService
 
 func initDB() {
 	var err error
@@ -38,9 +39,14 @@ func initDB() {
 }
 
 func main() {
+	log.SetLevel(Config.LogLevel)
+
 	initDB()
 
-	log.SetLevel(Config.LogLevel)
+	// For the domain service
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	domainService = NewDomainService(ctx, 15*time.Minute, 1*time.Hour)
 
 	httpServer := startAPI()
 
@@ -59,19 +65,16 @@ func main() {
 	log.Infof("Config path %s is valid and writable", configPath)
 
 	dnsServer := startDNS()
+	<-ctx.Done()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := httpServer.Shutdown(ctx); err != nil {
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Fatal("Failed to shutdown HTTP server:", err)
 	}
 
-	if err := dnsServer.ShutdownContext(ctx); err != nil {
+	if err := dnsServer.ShutdownContext(shutdownCtx); err != nil {
 		log.Fatal("Failed to shutdown DNS server:", err)
 	}
 

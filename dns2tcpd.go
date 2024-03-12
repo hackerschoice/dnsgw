@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"regexp"
 	"strconv"
 	"strings"
 	"text/template"
@@ -339,24 +338,6 @@ func mergeResources(existing, new []Resource) []Resource {
 	log.Debugf("Merging resources: existing: %+v, new: %+v", existing, new)
 	return merged
 
-}
-
-func extractPortFromConfig(configFilePath string) (int, error) {
-	content, err := os.ReadFile(configFilePath)
-	if err != nil {
-		log.Printf("Failed to read config file: %v", err)
-		return 0, err
-	}
-
-	portRegex := regexp.MustCompile(`port = (\d+)`)
-	matches := portRegex.FindSubmatch(content)
-	if len(matches) > 1 {
-		port, err := strconv.Atoi(string(matches[1]))
-		if err == nil {
-			return port, nil
-		}
-	}
-	return 0, err
 }
 
 func findAvailablePort() (int, error) {

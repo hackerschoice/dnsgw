@@ -64,8 +64,33 @@ var getConfigCmd = &cobra.Command{
 }
 
 func initDns2tcpdCommands() {
-	dns2tcpdCmd.AddCommand(createTunnelCmd, updateTunnelCmd, getConfigCmd)
+	dns2tcpdCmd.AddCommand(createTunnelCmd, updateTunnelCmd, getConfigCmd, addDomainCmd)
 	rootCmd.AddCommand(dns2tcpdCmd)
+}
+
+var addDomainCmd = &cobra.Command{
+	Use:   "add-domain [domain]",
+	Short: "Add a new domain",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		domain := args[0]
+		cliAddDomain(domain)
+	},
+}
+
+func cliAddDomain(domain string) {
+	apiURL := fmt.Sprintf("%s/v1/add/%s", getApiBaseUrl(), domain)
+	resp, err := http.Post(apiURL, "application/json", nil)
+	if err != nil {
+		log.Fatalf("Error adding domain: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Fatalf("Failed to add domain, status code: %d", resp.StatusCode)
+	}
+
+	fmt.Println("Domain added successfully.")
 }
 
 func cliGetConfig(updateKey, resource string, localPort string) {
@@ -94,6 +119,7 @@ func cliGetConfig(updateKey, resource string, localPort string) {
 	fmt.Printf("Config for resource %s:\n%s\n", resource, string(bodyBytes))
 }
 
+// TODO: Actually parse the status code etc
 func cliCreateTunnel(ip, port string) {
 	apiURL := fmt.Sprintf("%s/v1/dns2tcpd/create/%s/%s", getApiBaseUrl(), ip, port)
 	resp, err := http.Post(apiURL, "application/json", nil)

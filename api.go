@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -19,6 +20,13 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
+
+type DomainEntry struct {
+	ID          uint      `gorm:"primaryKey"`
+	Domain      string    `gorm:"unique;not null"`
+	LastChecked time.Time `gorm:"not null"`
+	IsValid     bool      `gorm:"not null;default:true"`
+}
 
 type NameServer struct {
 	ID        uint      `json:"id" gorm:"primaryKey"`
@@ -48,9 +56,19 @@ func startAPI() *http.Server {
 		tcp.POST("/config", getDns2tcpdConfig)
 	}
 
+	iodine := router.Group("/v1/iodine")
+	{
+		iodine.POST("/create/:ip/:port", createIodineTunnel)
+	}
+
 	ns := router.Group("/v1/ns")
 	{
 		ns.POST("/:ip", createNsEntry)
+	}
+
+	add := router.Group("/v1/add")
+	{
+		add.POST("/:domain", addDomain)
 	}
 
 	httpServer := &http.Server{
@@ -65,6 +83,64 @@ func startAPI() *http.Server {
 	}()
 	return httpServer
 
+}
+
+func validateAccessMode(c *gin.Context) bool {
+	mode := Config.AccessMode.Mode()
+	switch mode {
+	case "Public":
+	case "TokenRequired":
+		token := c.GetHeader("Authorization")
+		if token == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization token required"})
+			return false
+		}
+		// TODO: Process tokens
+	case "PreSharedKey":
+		psk := c.GetHeader("X-PreShared-Key")
+		if psk == "" || psk != (Config.AccessMode.(PreSharedKeyMode)).Key {
+			log.Debugf("Incorrect PSK provided")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing Pre-Shared Key"})
+			return false
+		}
+		log.Debugf("Correct PSK provided, continuing")
+	default:
+		log.Fatalf("Unknown access mode: %s", mode)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server configuration error"})
+		return false
+	}
+	return true
+}
+
+func validateCIDRBlacklist(ip string, c *gin.Context) bool {
+	for _, cidr := range Config.BlacklistedCIDRs {
+		_, blacklistedNet, err := net.ParseCIDR(cidr)
+		if err != nil {
+			log.Errorf("Failed to parse blacklisted CIDR %s: %v", cidr, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to parse blacklisted CIDR: %v", err)})
+			return false
+		}
+		if blacklistedNet.Contains(net.ParseIP(ip)) {
+			log.Errorf("Resource IP %s is in a blacklisted CIDR range %s", ip, cidr)
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Resource IP %s is in a blacklisted CIDR range", ip)})
+			return false
+		}
+	}
+	log.Debug("All resources validated against blacklisted CIDRs")
+	return true
+}
+
+func addDomain(c *gin.Context) {
+	domain := c.Param("domain")
+
+	err := domainService.AddDomainEntry(domain)
+	if err != nil {
+		log.Errorf("Failed to add domain: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Domain added successfully", "domain": domain})
 }
 
 func updateTunnel(c *gin.Context) {
@@ -201,7 +277,10 @@ func generateDomainName() string {
 		return ""
 	}
 
-	baseDomain := "." + Config.DomainName
+	rand.Seed(time.Now().UnixNano())
+	domainIndex := rand.Intn(len(Config.DomainNames))
+	baseDomain := "." + Config.DomainNames[domainIndex]
+
 	sequence := "a"
 	for _, domain := range existingDomains {
 		if domain == sequence+baseDomain {
@@ -238,34 +317,17 @@ func incrementSequence(s, charset string) string {
 }
 
 func createTunnel(c *gin.Context) {
-
-	mode := Config.AccessMode.Mode()
-	switch mode {
-	case "Public":
-	case "TokenRequired":
-		token := c.GetHeader("Authorization")
-		if token == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization token required"})
-			return
-		}
-		// TODO: Process tokens
-	case "PreSharedKey":
-		psk := c.GetHeader("X-PreShared-Key")
-		if psk == "" || psk != (Config.AccessMode.(PreSharedKeyMode)).Key {
-			log.Debugf("Incorrect PSK provided")
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing Pre-Shared Key"})
-			return
-		}
-		log.Debugf("Correct PSK provided, continuing")
-	default:
-		log.Fatalf("Unknown access mode: %s", mode)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server configuration error"})
+	if !validateAccessMode(c) {
 		return
 	}
 
 	log.Println("Creating tunnel...")
 
 	ip := c.Param("ip")
+	if !validateCIDRBlacklist(ip, c) {
+		return
+	}
+
 	portStr := c.Param("port")
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
@@ -273,21 +335,6 @@ func createTunnel(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid port"})
 		return
 	}
-
-	for _, cidr := range Config.BlacklistedCIDRs {
-		_, blacklistedNet, err := net.ParseCIDR(cidr)
-		if err != nil {
-			log.Errorf("Failed to parse blacklisted CIDR %s: %v", cidr, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to parse blacklisted CIDR: %v", err)})
-			return
-		}
-		if blacklistedNet.Contains(net.ParseIP(ip)) {
-			log.Errorf("Resource IP %s is in a blacklisted CIDR range %s", ip, cidr)
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Resource IP %s is in a blacklisted CIDR range", ip)})
-			return
-		}
-	}
-	log.Debug("All resources validated against blacklisted CIDRs")
 
 	identifier := uuid.New().String()
 	log.Printf("Generating domain name for IP: %s, Port: %d with Identifier: %s\n", ip, port, identifier)

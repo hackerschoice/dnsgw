@@ -32,7 +32,7 @@ type CIDRRange struct {
 type AppConfig struct {
 	Dns2tcpdConfigPath string
 	TunnelDatabasePath string
-	DomainName         string
+	DomainNames        []string
 	WatchDogTimeout    time.Duration
 	AccessMode         AccessMode
 	LogLevel           logrus.Level
@@ -42,11 +42,10 @@ type AppConfig struct {
 var Config = AppConfig{
 	Dns2tcpdConfigPath: "/tmp/dns-configs/",
 	TunnelDatabasePath: "./tunnels.db",
-	// TODO: support multiple domains
-	DomainName:       "abc.io",
-	WatchDogTimeout:  15 * time.Minute,
-	AccessMode:       PublicMode{},
-	LogLevel:         logrus.DebugLevel,
-	BlacklistedCIDRs: []string{"192.168.1.0/24"},
+	DomainNames:        []string{"abc.io", "thc.io"},
+	WatchDogTimeout:    15 * time.Minute,
+	AccessMode:         PublicMode{},
+	LogLevel:           logrus.DebugLevel,
+	BlacklistedCIDRs:   []string{"192.168.1.0/24"},
 	//BlacklistedCIDRs: []string{"192.168.1.0/24", "10.0.0.0/8", "127.0.0.0/8"},
 }
